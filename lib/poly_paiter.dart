@@ -2,7 +2,6 @@
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,115 +29,106 @@ class ImagePlate extends StatelessWidget {
 final _pointsCounter = ValueNotifier<int>(0);
 
 class ImageData {
+  final img.Image image;
+  List<Offset> points = [];
+  GlobalKey imageKey;
   int minX = 0;
   int minY = 0;
   int maxX = 0;
   int maxY = 0;
   int width = 0;
   int height = 0;
-  double factorX = 0.0;
-  double factorY = 0.0;
+  double get factorX => MediaQuery.of(imageKey.currentContext!).size.width / image.width;
+  double get factorY => MediaQuery.of(imageKey.currentContext!).size.height / image.height;
+
+  ImageData(this.imageKey, this.image);
+
+  void setMetrics(List<img.Point> points) {
+    minX = points.map((point) => point.xi).reduce(min);
+    minY = points.map((point) => point.yi).reduce(min);
+    maxX = points.map((point) => point.xi).reduce(max);
+    maxY = points.map((point) => point.yi).reduce(max);
+    width = maxX - minX;
+    height = maxY - minY;
+  }
+
+  Uint8List getImage() {
+    return img.encodePng(image);
+  }
+}
+
+class CropMessage {
+  final Uint8List? image;
+  final String? message;
+
+  CropMessage({this.image, this.message});
 }
 
 class PolyPainter extends CustomPainter {
-  Uint8List? image;
-  ImagePlate? widget;
-  final List<Offset> _points = [];
   final GlobalKey _imageKey = GlobalKey();
-  final ImageData _imageData = ImageData();
+  late ImageData data;
+  ImagePlate? widget;
 
-  PolyPainter({this.image}) : super(repaint: _pointsCounter) {
+   PolyPainter({Uint8List? image}) : super(repaint: _pointsCounter) {
     if(image != null) {
-      widget = ImagePlate(image: image!, imageKey: _imageKey, painter: this);
+      widget = ImagePlate(image: image, imageKey: _imageKey, painter: this);
+      data = ImageData(_imageKey, img.decodeImage(image)!);
     }
   }
 
   Future<Uint8List> cropImage() async {
     debugPrint('enter cropImage: ${DateTime.now()}');
-    if (_points.length < 3 || image == null) {
-      return image ?? Uint8List(0);
+    if (data.points.length < 3) {
+      return data.getImage();
     }
-
-    // Determine image's scale factor
-    var mainImage = img.decodeImage(image!);
-    var imageContext = _imageKey.currentContext;
-    if (imageContext != null) {
-      _imageData.factorX = imageContext.size!.width / mainImage!.width;
-      _imageData.factorY = imageContext.size!.height / mainImage.height;
-    }
-
-    var mask = _makeMask(mainImage!, _points, _imageData);
-    // var cimg = _crop(mainImage, mask, _imageData);
 
     final receivePort = ReceivePort();
-    await Isolate.spawn(_crop, [mainImage, mask, _imageData, receivePort.sendPort]);
+    await Isolate.spawn(_crop, [data, receivePort.sendPort]);
     final completer = Completer<Uint8List>();
     receivePort.listen((message) {
       completer.complete(message);
       receivePort.close();
     });
-    var cimg = await completer.future;
-
-    debugPrint('exit cropImage: ${DateTime.now()}');
-    return cimg;
+    return await completer.future;
   }
 
-  // static void _crop(List<dynamic> args) async {
-  static img.Image _makeMask(img.Image image, List<Offset> points, ImageData imageData) {
-    debugPrint('enter _makeMask: ${DateTime.now()}');
-
+  static img.Image _makeMask(ImageData data) {
     // Create a mask with the same size as the image
-    final mask = img.Image(width: image.width, height: image.height);
+    final mask = img.Image(width: data.image.width, height: data.image.height);
     img.fill(mask, color: mask.getColor(0, 0, 0, 0));
 
-    final orderedPoints = _orderPoints(points);
+    final orderedPoints = _orderPoints(data.points);
     // Draw the polygon on the mask applying the scale factor
     final vertices = orderedPoints.map((point) =>
-        img.Point((point.dx/imageData.factorX).toInt(), (point.dy/imageData.factorY).toInt())).toList();
+        img.Point((point.dx/data.factorX).toInt(), (point.dy/data.factorY).toInt())).toList();
     img.fillPolygon(mask, vertices: vertices, color: mask.getColor(255, 255, 255, 255));
 
     // The size of the cropped image is defined by the difference between the largest and smallest x and y values.
-    imageData.minX = vertices.map((point) => point.xi).reduce(min);
-    imageData.minY = vertices.map((point) => point.yi).reduce(min);
-    imageData.maxX = vertices.map((point) => point.xi).reduce(max);
-    imageData.maxY = vertices.map((point) => point.yi).reduce(max);
-    imageData.width = imageData.maxX - imageData.minX;
-    imageData.height = imageData.maxY - imageData.minY;
+    data.setMetrics(vertices);
 
-    debugPrint('exit _makeMask: ${DateTime.now()}');
     return mask;
   }
 
-
   static void _crop(List<dynamic> args) async {
-    final img.Image image = args[0];
-    final img.Image mask = args[1];
-    final ImageData imageData = args[2];
-    final SendPort sendPort = args[3];
+    final ImageData imageData = args[0];
+    final SendPort sendPort = args[1];
 
-  // Uint8List _crop(img.Image image, img.Image mask, ImageData imageData) {
-    debugPrint('enter _crop: ${DateTime.now()}');
+    var mask = _makeMask(imageData);
 
     // Apply the mask to the image
     final cropped = img.Image(width: imageData.width, height: imageData.height, numChannels: 4);
     var white = mask.getColor(255, 255, 255, 255);
     img.fill(cropped, color: mask.getColor(0, 0, 0, 0));
-    for (int y = 0; y < image.height; y++) {
-      for (int x = 0; x < image.width; x++) {
+    for (int y = 0; y < imageData.image.height; y++) {
+      for (int x = 0; x < imageData.image.width; x++) {
         final maskPixel = mask.getPixelLinear(x, y);
         if (maskPixel == white) {
-          cropped.setPixel(x-imageData.minX, y-imageData.minY, image.getPixelLinear(x, y));
+          cropped.setPixel(x-imageData.minX, y-imageData.minY, imageData.image.getPixelLinear(x, y));
         }
       }
     }
 
-    debugPrint('encoding _crop: ${DateTime.now()}');
-    var cimg = img.encodePng(cropped);
-    debugPrint('exit _crop: ${DateTime.now()}');
-
-    sendPort.send(cimg);
-
-    // return cimg;
+    sendPort.send(img.encodePng(cropped));
   }
 
   static List<Offset> _orderPoints(List<Offset> points) {
@@ -162,14 +152,14 @@ class PolyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if(_points.isEmpty) return;
+    if(data.points.isEmpty) return;
 
-    if(_points.length == 1) {
-      _paintDots(Colors.white10, Colors.red, canvas, _points);
+    if(data.points.length == 1) {
+      _paintDots(Colors.white10, Colors.red, canvas, data.points);
       return;
     }
 
-    final orderedPoints = _orderPoints(_points);
+    final orderedPoints = _orderPoints(data.points);
 
     // Paint the dots
     _paintDots(Colors.white10, Colors.red, canvas, orderedPoints);
@@ -179,8 +169,8 @@ class PolyPainter extends CustomPainter {
   }
 
   void addPoint(TapUpDetails details) {
-    _points.add(details.localPosition);
-    _pointsCounter.value = _points.length;
+    data.points.add(details.localPosition);
+    _pointsCounter.value = data.points.length;
   }
 
   void _paintDots(Color outerColor, Color innerColor, Canvas canvas, List<Offset> points) {
