@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:polygon_crop_app/poly_paiter.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     home: PolygonCropper(),
     debugShowCheckedModeBanner: false,
@@ -25,6 +26,7 @@ class PolygonCropper extends StatefulWidget {
 class _PolygonCropperState extends State<PolygonCropper> {
   Uint8List? image;
   var _showDialog = false;
+  var message = 'Start Cropping...';
 
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -48,6 +50,12 @@ class _PolygonCropperState extends State<PolygonCropper> {
     });
   }
 
+  void setMessage(String message) {
+    setState(() {
+      this.message = message;
+    });
+  }
+
   // Save the cropped image as a PNG file
   Future<void> _saveImage(Uint8List bytes) async {
     final directory = await getTemporaryDirectory();
@@ -60,7 +68,7 @@ class _PolygonCropperState extends State<PolygonCropper> {
   @override
   Widget build(BuildContext context) {
     var size = MediaQuery.of(context).size;
-    var painter = PolyPainter(image: image);
+    var painter = PolyPainter(image: image, onMessage: setMessage);
     return Stack(
       children: [
         Scaffold(
@@ -117,7 +125,7 @@ class _PolygonCropperState extends State<PolygonCropper> {
                     const SizedBox(height: 10),
                     // const CircularProgressIndicator(),
                     const SizedBox(height: 10),
-                    Text('Cropping image...',
+                    Text(message,
                       style: Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(color: Colors.black),
                     ),
