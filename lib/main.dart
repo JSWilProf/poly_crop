@@ -70,9 +70,9 @@ class _PolygonCropperState extends State<PolygonCropper> {
               IconButton(
                   icon: const Icon(Icons.crop),
                   onPressed: () async {
-                    // showDialog(true);
+                    showDialog(true);
                     setImage(await painter.cropImage());
-                    // showDialog(false);
+                    showDialog(false);
                   }
               ),
               IconButton(
@@ -115,7 +115,7 @@ class _PolygonCropperState extends State<PolygonCropper> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 10),
-                    const CircularProgressIndicator(),
+                    // const CircularProgressIndicator(),
                     const SizedBox(height: 10),
                     Text('Cropping image...',
                       style: Theme.of(context).textTheme.bodyMedium
