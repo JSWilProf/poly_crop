@@ -1,16 +1,21 @@
 # polygon_crop_app
 
-A Crop Flutter App.
+Um Programa exemplo demonstrando como recortar polígonos de imagens.
 
-## Getting Started
+## Recursos utilizados
 
-This project is a starting point for a Flutter application.
+- No mini_dialog é utilizado o pacote 'Flutter Animation Progress Bar' para criar a barra de progresso.
+- No poly_painter são utilizadas as classes Isolate, ReceiverPort e Completer para implementar uma Thread a fim de processar o recorte do polígono.
 
-A few resources to get you started if this is your first Flutter project:
+### Algoritmo
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Foi empregado o algoritmo para a ordenação dos pontos de recorte tomando como base o centro das coordenadas. Nessa
+versão é apresentada alguns problemas na dinâmica de formação das linhas que formam a imagem a medida de modificamos suas coordenadas.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Também é utilizada a conversão das coordenadas dos pontos de recorte para as coordenadas da imagem para ajustar a posição apresentada na tela em 
+relação com o tamanho real da imagem. Esta conversão também ocorre quando mudamos a geometria da imagem ao rotacionar o celular fazendo
+com que a imagem se ajuste ao tamanho da tela.
+
+Existe dois call backs para tratar as mensagens durante o processo de recorte e outro para informar a quantidade de pontos de recorte
+para propiciar à interface meios de habilitar recursos de recorte e limpeza de pontos.
+
